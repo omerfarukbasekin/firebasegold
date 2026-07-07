@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="tr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GoldX | Canlı Altın Takip & Analiz</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Tailwind Config -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                        display: ['Outfit', 'sans-serif'],
+                    },
+                    colors: {
+                        gold: {
+                            50: '#fffdf5',
+                            100: '#fef9e6',
+                            200: '#fdf0c0',
+                            300: '#fae190',
+                            400: '#f6cb56',
+                            500: '#f1b424',
+                            600: '#dd9815',
+                            700: '#b87511',
+                            800: '#915610',
+                            900: '#75430f',
+                            950: '#442205',
+                        },
+                        slate: {
+                            950: '#0b0f17'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: radial-gradient(circle at top right, rgba(241, 180, 36, 0.08), transparent 45%),
+                        radial-gradient(circle at bottom left, rgba(14, 165, 233, 0.05), transparent 45%),
+                        #0b0f17;
+        }
+        .glass-panel {
+            background: rgba(22, 30, 47, 0.65);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .gold-glow {
+            text-shadow: 0 0 12px rgba(241, 180, 36, 0.4);
+        }
+        .green-glow {
+            text-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+        }
+        .red-glow {
+            text-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        /* Price tick animation */
+        @keyframes tickUp {
+            0% { background-color: rgba(16, 185, 129, 0.2); }
+            100% { background-color: transparent; }
+        }
+        @keyframes tickDown {
+            0% { background-color: rgba(239, 68, 68, 0.2); }
+            100% { background-color: transparent; }
+        }
+        .tick-up {
+            animation: tickUp 1s ease-out;
+        }
+        .tick-down {
+            animation: tickDown 1s ease-out;
+        }
+    </style>
+
+    <!-- Firebase SDK (Compat Version is simple and reliable for browser CDNs) -->
+    <script defer src="/__/firebase/12.15.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.15.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=true"></script>
+</head>
+<body class="text-slate-100 min-h-screen antialiased flex flex-col">
+
+    <!-- Header -->
+    <header class="border-b border-white/5 bg-slate-950/60 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-gold-600 to-gold-400 flex items-center justify-center shadow-lg shadow-gold-500/20">
+                    <i class="fa-solid fa-coins text-slate-950 text-xl"></i>
+                </div>
+                <div>
+                    <span class="font-display font-extrabold text-2xl tracking-tight bg-gradient-to-r from-gold-400 via-gold-200 to-white bg-clip-text text-transparent">GOLD<span class="text-gold-500 font-light">X</span></span>
+                    <span class="text-[10px] block text-slate-400 font-semibold uppercase tracking-wider -mt-1">Real-time Dashboard</span>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-2 text-xs bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full text-emerald-400 font-medium">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Firestore Canlı Bağlantı
+                </div>
+                <button onclick="window.location.reload()" class="p-2 text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg transition">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col lg:flex-row gap-6">
+        
+        <!-- Sidebar: Active Gold Types List -->
+        <aside class="w-full lg:w-80 flex-shrink-0 flex flex-col gap-4">
+            <div class="glass-panel rounded-2xl p-4 flex flex-col gap-3">
+                <div class="flex items-center justify-between px-1">
+                    <h2 class="font-display font-bold text-lg text-slate-200">Enstrümanlar</h2>
+                    <span class="text-xs text-slate-400" id="totalInstruments">-- model</span>
+                </div>
+                
+                <!-- Search bar -->
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400 text-sm">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                    </span>
+                    <input type="text" id="instrumentSearch" placeholder="Altın ara (örn: GA, C)..." class="w-full pl-9 pr-4 py-2 bg-slate-900/80 border border-white/5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/40 focus:border-gold-500 text-slate-200 placeholder-slate-500 transition">
+                </div>
+
+                <!-- Gold List Container -->
+                <div class="flex flex-col gap-2 max-h-[480px] overflow-y-auto pr-1" id="goldListContainer">
+                    <!-- Shimmer Loading -->
+                    <div class="animate-pulse flex flex-col gap-2">
+                        <div class="h-16 bg-white/5 rounded-xl"></div>
+                        <div class="h-16 bg-white/5 rounded-xl"></div>
+                        <div class="h-16 bg-white/5 rounded-xl"></div>
+                        <div class="h-16 bg-white/5 rounded-xl"></div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Workspace: Chart, Stats and Data Grid -->
+        <section class="flex-grow flex flex-col gap-6 min-w-0">
+            
+            <!-- Hero Details Card -->
+            <div class="glass-panel rounded-3xl p-6 relative overflow-hidden" id="heroPanel">
+                <div class="absolute -right-16 -top-16 w-48 h-48 bg-gold-500/5 rounded-full blur-3xl"></div>
+                
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div>
+                        <div class="flex items-center gap-3">
+                            <span class="text-xs font-bold uppercase tracking-widest text-gold-400 bg-gold-500/10 border border-gold-500/20 px-2.5 py-1 rounded" id="selectedCode">GA</span>
+                            <h1 class="font-display font-black text-3xl text-slate-100" id="selectedName">Gram Altın</h1>
+                        </div>
+                        <p class="text-slate-400 text-xs mt-1.5" id="lastUpdatedStr">Güncelleme: --</p>
+                    </div>
+
+                    <div class="flex items-center gap-6">
+                        <div class="text-right">
+                            <span class="text-[10px] uppercase font-bold tracking-wider text-slate-500 block mb-1">Anlık Alış</span>
+                            <span class="font-display font-extrabold text-3xl text-slate-100 gold-glow" id="heroBuy">--</span>
+                        </div>
+                        <div class="h-12 w-px bg-white/10"></div>
+                        <div class="text-right">
+                            <span class="text-[10px] uppercase font-bold tracking-wider text-slate-500 block mb-1">Anlık Satış</span>
+                            <span class="font-display font-extrabold text-3xl text-slate-100 gold-glow" id="heroSell">--</span>
+                        </div>
+                        <div class="h-12 w-px bg-white/10"></div>
+                        <div class="text-right">
+                            <span class="text-[10px] uppercase font-bold tracking-wider text-slate-500 block mb-1">Değişim (24h)</span>
+                            <span class="font-display font-extrabold text-2xl flex items-center gap-1.5 justify-end" id="heroChange">
+                                <span class="text-slate-400">--</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="glass-panel rounded-2xl p-4">
+                    <span class="text-[10px] uppercase font-bold tracking-widest text-slate-400 block mb-1">Makas (Spread)</span>
+                    <strong class="font-display text-lg text-slate-200 block" id="statSpread">--</strong>
+                    <span class="text-[10px] text-slate-400 block mt-1" id="statSpreadPercent">Makas Oranı: --</span>
+                </div>
+                <div class="glass-panel rounded-2xl p-4">
+                    <span class="text-[10px] uppercase font-bold tracking-widest text-slate-400 block mb-1">Gün En Düşük</span>
+                    <strong class="font-display text-lg text-emerald-400 block" id="statLow">--</strong>
+                    <span class="text-[10px] text-slate-500 block mt-1">24 Saatlik Alış</span>
+                </div>
+                <div class="glass-panel rounded-2xl p-4">
+                    <span class="text-[10px] uppercase font-bold tracking-widest text-slate-400 block mb-1">Gün En Yüksek</span>
+                    <strong class="font-display text-lg text-red-400 block" id="statHigh">--</strong>
+                    <span class="text-[10px] text-slate-500 block mt-1">24 Saatlik Satış</span>
+                </div>
+                <div class="glass-panel rounded-2xl p-4">
+                    <span class="text-[10px] uppercase font-bold tracking-widest text-slate-400 block mb-1">Ortalama Alış</span>
+                    <strong class="font-display text-lg text-gold-400 block" id="statAvg">--</strong>
+                    <span class="text-[10px] text-slate-500 block mt-1">Seçili Zaman Dilimi</span>
+                </div>
+            </div>
+
+            <!-- Chart Card -->
+            <div class="glass-panel rounded-3xl p-6 flex flex-col gap-4">
+                <div class="flex items-center justify-between flex-wrap gap-4">
+                    <h3 class="font-display font-bold text-lg text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-line text-gold-500"></i>
+                        Fiyat Değişim Grafiği
+                    </h3>
+                    
+                    <!-- Chart Time Ranges -->
+                    <div class="flex bg-slate-950/60 p-1 rounded-xl border border-white/5" id="rangeButtons">
+                        <button data-range="24h" class="range-btn active text-xs px-3.5 py-1.5 rounded-lg text-slate-400 font-semibold hover:text-white transition [&.active]:bg-gold-500 [&.active]:text-slate-950">24 Saat</button>
+                        <button data-range="1w" class="range-btn text-xs px-3.5 py-1.5 rounded-lg text-slate-400 font-semibold hover:text-white transition [&.active]:bg-gold-500 [&.active]:text-slate-950">1 Hafta</button>
+                        <button data-range="1m" class="range-btn text-xs px-3.5 py-1.5 rounded-lg text-slate-400 font-semibold hover:text-white transition [&.active]:bg-gold-500 [&.active]:text-slate-950">1 Ay</button>
+                        <button data-range="all" class="range-btn text-xs px-3.5 py-1.5 rounded-lg text-slate-400 font-semibold hover:text-white transition [&.active]:bg-gold-500 [&.active]:text-slate-950">Tümü</button>
+                    </div>
+                </div>
+
+                <!-- Line Chart Holder -->
+                <div class="relative h-[400px] w-full bg-slate-950/20 rounded-2xl border border-white/5 p-4 flex items-center justify-center">
+                    <canvas id="liveGoldChart" class="w-full h-full"></canvas>
+                    
+                    <!-- Chart Loader Spinner Overlay -->
+                    <div id="chartLoader" class="absolute inset-0 bg-slate-950/80 rounded-2xl flex flex-col items-center justify-center gap-3 transition-opacity duration-300 opacity-0 pointer-events-none">
+                        <div class="w-10 h-10 border-4 border-gold-500/25 border-t-gold-500 rounded-full animate-spin"></div>
+                        <span class="text-xs text-slate-400 font-medium">Firestore'dan veriler çekiliyor...</span>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-white/5 bg-slate-950/40 py-6 text-center text-xs text-slate-500 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p>&copy; 2026 GoldX. Tüm hakları saklıdır. Veriler Firestore üzerinden anlık senkronize edilmektedir.</p>
+            <div class="flex items-center gap-4 text-slate-400">
+                <a href="https://static.altinkaynak.com/public/Gold" target="_blank" class="hover:text-gold-400 transition"><i class="fa-solid fa-database mr-1.5"></i>Altınkaynak API</a>
+                <span>&bull;</span>
+                <span class="text-xs bg-slate-900 border border-white/10 px-2.5 py-1 rounded text-slate-300">v1.1.0 (Firestore)</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- App Script -->
+    <script src="/app.js"></script>
+</body>
+</html>
