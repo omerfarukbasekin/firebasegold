@@ -100,6 +100,22 @@
         .tick-down {
             animation: tickDown 1s ease-out;
         }
+
+        /* Marquee Kayan Yazı Animasyonu */
+        @keyframes marquee {
+            0% { transform: translateX(0%); }
+            100% { transform: translateX(-50%); }
+        }
+        .animate-marquee {
+            display: flex;
+            animation: marquee 25s linear infinite;
+        }
+        .animate-marquee:hover {
+            animation-play-state: paused;
+        }
+    </style>
+            animation: tickDown 1s ease-out;
+        }
     </style>
 
     <!-- Firebase SDK (Compat Version is simple and reliable for browser CDNs) -->
@@ -133,6 +149,25 @@
             </div>
         </div>
     </header>
+
+    <!-- Ticker / Kayan Yazı Bölümü -->
+    <section class="bg-slate-950/80 border-b border-white/5 py-2.5 overflow-hidden w-full relative z-40">
+        <div class="flex items-center w-full max-w-7xl mx-auto px-4 overflow-hidden relative">
+            <div class="flex items-center gap-2 bg-slate-950 pr-4 z-10 border-r border-white/10 shrink-0 font-display font-black text-xs tracking-wider text-amber-500 uppercase select-none">
+                <span class="relative flex h-2 w-2">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                </span>
+                Canlı Piyasa (API)
+            </div>
+            <!-- Kayan Ticker Container -->
+            <div class="relative flex overflow-x-hidden w-full select-none" id="tickerWrapper">
+                <div class="animate-marquee whitespace-nowrap flex items-center gap-10 pl-6" id="tickerContainer">
+                    <span class="text-xs text-slate-500">Doğrudan Altınkaynak API verileri yükleniyor...</span>
+                </div>
+            </div>
+        </div>
+    </section>
 
     <!-- Main Container -->
     <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col lg:flex-row gap-6">
@@ -198,6 +233,39 @@
                             <span class="font-display font-extrabold text-2xl flex items-center gap-1.5 justify-end" id="heroChange">
                                 <span class="text-slate-400">--</span>
                             </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Divider -->
+                <div class="h-px bg-white/5 my-5"></div>
+                
+                <!-- Altınkaynak API Live Section -->
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-950/30 p-4 rounded-2xl border border-white/5">
+                    <div class="flex items-center gap-2.5">
+                        <span class="relative flex h-2 w-2">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                        </span>
+                        <div>
+                            <span class="text-xs font-bold text-amber-400 font-display block">Altınkaynak API Doğrudan Bağlantı</span>
+                            <span class="text-[10px] text-slate-500 font-medium">Sayfa yenilemeden canlı güncellenir (10s)</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-6 justify-between sm:justify-end">
+                        <div class="text-right">
+                            <span class="text-[9px] uppercase font-bold tracking-wider text-slate-500 block mb-0.5">Canlı Alış</span>
+                            <span class="font-display font-bold text-sm text-slate-200" id="apiBuy">-- TL</span>
+                        </div>
+                        <div class="h-8 w-px bg-white/5"></div>
+                        <div class="text-right">
+                            <span class="text-[9px] uppercase font-bold tracking-wider text-slate-500 block mb-0.5">Canlı Satış</span>
+                            <span class="font-display font-bold text-sm text-slate-200" id="apiSell">-- TL</span>
+                        </div>
+                        <div class="h-8 w-px bg-white/5"></div>
+                        <div class="text-right">
+                            <span class="text-[9px] uppercase font-bold tracking-wider text-slate-500 block mb-0.5">Gecikme / Sapma</span>
+                            <span class="font-display font-bold text-xs text-slate-400" id="apiDiff">--</span>
                         </div>
                     </div>
                 </div>
