@@ -43,7 +43,60 @@ npm install -g firebase-tools
 firebase login
 ```
 
-### 2. Canlıya Dağıtma (Deploy)
+---
+
+## 🔒 Firebase Security Rules (Güvenlik Kuralları)
+
+Web sitesinin Firestore veritabanındaki verileri dışarıdan başarıyla okuyabilmesi (ve grafik oluşturabilmesi), ancak kötü niyetli kişilerin verileri değiştirememesi için aşağıdaki güvenlik kurallarını (Security Rules) kurmanız gerekmektedir:
+
+### Kuralların Kurulumu:
+1. **[Firebase Console](https://console.firebase.google.com/)**'a girin.
+2. Projenizi seçip sol menüden **Firestore Database** seçeneğine tıklayın.
+3. Üst menüden **Rules (Kurallar)** sekmesine gidin.
+4. Mevcut kodu silip aşağıdaki kuralları yapıştırın:
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read: if true;    // Herkes okuyabilsin (Web sitesinin çalışması için)
+      allow write: if false;  // Sadece arka plandaki güvenli API/Python yazabilsin
+    }
+  }
+}
+```
+5. Sağ üstteki **Publish (Yayınla)** butonuna basarak kuralları canlıya alın.
+
+---
+
+## 📊 Firestore Veri Yapısı (Schema)
+
+Proje verileri Firestore üzerinde son derece verimli, tekil (idempotent) ve iki aşamalı bir koleksiyon yapısıyla saklanır:
+
+```text
+/gold_prices (Koleksiyon)
+  ├── {GOLD_CODE} (Belge - Örn: "GA" veya "C")
+        ├── code: "GA" (String)
+        ├── description: "Gram Altın" (String)
+        ├── price_buy: 2450.50 (Number / Double)
+        ├── price_sell: 2470.80 (Number / Double)
+        ├── source_updated_at: July 20, 2026 at 9:53:18 AM UTC+3 (Timestamp)
+        ├── updated_at: July 20, 2026 at 9:53:18 AM UTC+3 (Timestamp)
+        └── /history (Alt Koleksiyon)
+              └── {doc_id} (Belge - Örn: "2026-07-20_06-53-17")
+                    ├── price_buy: 2450.50 (Number)
+                    ├── price_sell: 2470.80 (Number)
+                    ├── source_updated_at: July 20, 2026 at 9:53:18 AM (Timestamp)
+                    └── created_at: July 20, 2026 at 9:53:18 AM (Timestamp)
+```
+
+- **`gold_prices` ana dokümanı:** Dashboard'un sol sidebarındaki güncel anlık fiyat listesini doldurmak için gerçek zamanlı dinlenir. Arka plan servisimiz burayı her güncellemede üstüne yazar (overwrites).
+- **`history` alt koleksiyonu:** Grafiklerin çizilmesi için tarihsel veriyi saklar. `doc_id` olarak veri çekilme saati (`YYYY-MM-DD_HH-MM-SS`) atandığı için, ağ hatalarında veya çakışmalarda **mükerrer (duplicate) kayıt oluşması kesin olarak engellenir**.
+
+---
+
+## 2. Canlıya Dağıtma (Deploy)
 Değişiklikleri yayına almak için `firebase_gold` dizininde şu komutu çalıştırın:
 ```bash
 firebase deploy --only hosting
