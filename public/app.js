@@ -17,15 +17,9 @@ const lastUpdatedStr = document.getElementById('lastUpdatedStr');
 const heroBuy = document.getElementById('heroBuy');
 const heroSell = document.getElementById('heroSell');
 const heroChange = document.getElementById('heroChange');
-
-// Live API DOM Elements
-const apiBuy = document.getElementById('apiBuy');
-const apiSell = document.getElementById('apiSell');
-const apiDiff = document.getElementById('apiDiff');
 const tickerContainer = document.getElementById('tickerContainer');
 
-let liveApiPricesMap = {}; // Cache of direct Altınkaynak API prices keyed by Code
-let previousLiveApiPricesMap = {}; // Cache to determine price movements (up/down)
+let previousGoldPricesMap = {}; // Cache to determine price movements (up/down) from Firestore
 
 // Stats DOM Elements
 const statSpread = document.getElementById('statSpread');
@@ -58,9 +52,6 @@ function initApp() {
         // Start listening to the gold_prices collection in real-time
         listenToLatestPrices();
         
-        // Start polling the direct Altınkaynak API
-        startLiveApiPolling();
-        
         // Setup Event Listeners
         setupEventListeners();
     } catch (e) {
@@ -75,11 +66,14 @@ function listenToLatestPrices() {
     unsubscribeLatest = db.collection('gold_prices').onSnapshot((snapshot) => {
         const listItems = [];
         let updatedCount = 0;
+        
+        // Save previous map to calculate up/down ticks
+        previousGoldPricesMap = { ...goldPricesMap };
 
         snapshot.forEach((doc) => {
             const data = doc.data();
             const code = doc.id;
-            const oldData = goldPricesMap[code];
+            const oldData = previousGoldPricesMap[code];
 
             // Determine if price ticked up/down
             let tickClass = '';
@@ -105,6 +99,9 @@ function listenToLatestPrices() {
         
         // Update the active hero panel with fresh live data
         updateHeroPanel();
+        
+        // Update the scrolling ticker
+        renderLiveTicker();
     }, (error) => {
         console.error("Firestore listening error: ", error);
     });
@@ -188,7 +185,6 @@ function selectGoldType(code) {
     // Rerender list to show new selection status
     renderGoldList(Object.values(goldPricesMap));
     updateHeroPanel();
-    updateLiveApiSection();
     fetchHistoryData();
 }
 
@@ -215,8 +211,6 @@ function updateHeroPanel() {
         statSpread.textContent = `${spreadVal.toFixed(2)} TL`;
         statSpreadPercent.textContent = `Makas Oranı: %${spreadPercentVal.toFixed(3)}`;
     }
-
-    updateLiveApiSection();
 }
 
 // Fetch historical data for active gold type based on range
@@ -459,70 +453,30 @@ function showChartLoader(show) {
     }
 }
 
-// -------- DIRECT ALTINKAYNAK API POLLING & SYNC DETECTOR --------
 
-function parseLivePrice(val) {
-    if (!val) return 0;
-    return parseFloat(val.toString().replace(/\./g, "").replace(",", "."));
-}
-
-async function fetchLiveApiData() {
-    try {
-        const response = await fetch('https://static.altinkaynak.com/public/Gold', { cache: 'no-store' });
-        if (!response.ok) throw new Error('API Response not OK');
-        const data = await response.json();
-        
-        // Save current state to previous state before rewriting
-        previousLiveApiPricesMap = { ...liveApiPricesMap };
-        
-        // Populate liveApiPricesMap
-        liveApiPricesMap = {};
-        data.forEach(item => {
-            const code = item.Kod;
-            liveApiPricesMap[code] = {
-                code: code,
-                description: item.Aciklama,
-                price_buy: parseLivePrice(item.Alis),
-                price_sell: parseLivePrice(item.Satis),
-                updated_at: item.GuncellenmeZamani
-            };
-        });
-        
-        console.log("Altınkaynak direct API data fetched successfully", Object.keys(liveApiPricesMap).length + " items");
-        
-        // Update live API section of hero panel
-        updateLiveApiSection();
-        
-        // Update the marquee slide ticker
-        renderLiveTicker();
-    } catch (e) {
-        console.warn("Could not fetch Altınkaynak direct API data (CORS or network error):", e);
-        // Display fallback in UI
-        apiBuy.innerHTML = `<span class="text-slate-500">Çevrimdışı</span>`;
-        apiSell.innerHTML = `<span class="text-slate-500">Çevrimdışı</span>`;
-        apiDiff.innerHTML = `<span class="text-xs text-red-500 font-semibold bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded text-[10px]"><i class="fa-solid fa-triangle-exclamation mr-1"></i>CORS Engeli / Ağ Hatası</span>`;
-        tickerContainer.innerHTML = `<span class="text-xs text-red-400 font-semibold"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Canlı veriler alınamadı (CORS veya Ağ Hatası)</span>`;
-    }
-}
+// -------- TICKER RENDER (USING FIRESTORE) --------
 
 function renderLiveTicker() {
     if (!tickerContainer) return;
 
-    const items = Object.values(liveApiPricesMap);
-    if (items.length === 0) return;
+    const items = Object.values(goldPricesMap);
+    if (items.length === 0) {
+        tickerContainer.innerHTML = `<span class="text-xs text-slate-500">Piyasa verileri bekleniyor...</span>`;
+        return;
+    }
 
     // Sort by code alphabetically
     items.sort((a, b) => a.code.localeCompare(b.code));
 
     let tickerHtml = "";
     
-    // We duplicate the list to make a seamless infinite loop in marquee
+    // Sonsuz dönme efekti için diziyi kopyalıyoruz
     const renderItems = [...items, ...items];
 
     renderItems.forEach(item => {
-        const prevItem = previousLiveApiPricesMap[item.code];
+        const prevItem = previousGoldPricesMap[item.code];
         
-        let colorClass = "text-slate-300"; // neutral
+        let colorClass = "text-slate-300"; // nötr
         let iconHtml = "";
 
         if (prevItem) {
@@ -538,48 +492,14 @@ function renderLiveTicker() {
         tickerHtml += `
             <div class="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-900/60 border border-white/5">
                 <span class="font-display font-black text-xs text-white tracking-wide">${item.code}</span>
-                <span class="text-[10px] text-slate-500 font-semibold uppercase">${item.description || ''}</span>
+                <span class="text-[10px] text-slate-500 font-semibold uppercase">${item.description || ""}</span>
                 <div class="flex items-center text-xs ${colorClass}">
                     ${iconHtml}
-                    <span>A: ${item.price_buy.toFixed(2)} / S: ${item.price_sell.toFixed(2)}</span>
+                    <span>A: ${item.price_buy ? item.price_buy.toFixed(2) : "--"} / S: ${item.price_sell ? item.price_sell.toFixed(2) : "--"}</span>
                 </div>
             </div>
         `;
     });
 
     tickerContainer.innerHTML = tickerHtml;
-}
-
-function updateLiveApiSection() {
-    const apiData = liveApiPricesMap[currentGoldType];
-    const firestoreData = goldPricesMap[currentGoldType];
-    
-    if (!apiData) {
-        apiBuy.textContent = '-- TL';
-        apiSell.textContent = '-- TL';
-        apiDiff.textContent = '--';
-        return;
-    }
-    
-    apiBuy.textContent = `${apiData.price_buy.toFixed(2)} TL`;
-    apiSell.textContent = `${apiData.price_sell.toFixed(2)} TL`;
-    
-    if (firestoreData && firestoreData.price_buy) {
-        const diff = Math.abs(apiData.price_buy - firestoreData.price_buy);
-        if (diff < 0.01) {
-            apiDiff.innerHTML = `<span class="text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded text-[10px]"><i class="fa-solid fa-check-double mr-1"></i>Senkronize (%0)</span>`;
-        } else {
-            const percentDiff = (diff / apiData.price_buy) * 100;
-            apiDiff.innerHTML = `<span class="text-amber-400 font-semibold bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded text-[10px]"><i class="fa-regular fa-clock mr-1"></i>Sapma: %${percentDiff.toFixed(3)}</span>`;
-        }
-    } else {
-        apiDiff.textContent = '--';
-    }
-}
-
-function startLiveApiPolling() {
-    // Initial fetch
-    fetchLiveApiData();
-    // Poll every 10 seconds
-    setInterval(fetchLiveApiData, 10000);
 }
