@@ -66,21 +66,32 @@ function listenToLatestPrices() {
     unsubscribeLatest = db.collection('gold_prices').onSnapshot((snapshot) => {
         const listItems = [];
         let updatedCount = 0;
-        
-        // Save previous map to calculate up/down ticks
-        previousGoldPricesMap = { ...goldPricesMap };
 
         snapshot.forEach((doc) => {
             const data = doc.data();
             const code = doc.id;
-            const oldData = previousGoldPricesMap[code];
+            
+            // Check if this is a fresh update to populate previous prices
+            const currentCached = goldPricesMap[code];
+            let isNewUpdate = false;
+            
+            if (currentCached) {
+                const oldTime = currentCached.source_updated_at ? currentCached.source_updated_at.toMillis() : 0;
+                const newTime = data.source_updated_at ? data.source_updated_at.toMillis() : 0;
+                if (newTime > oldTime) {
+                    previousGoldPricesMap[code] = currentCached;
+                    isNewUpdate = true;
+                }
+            }
 
-            // Determine if price ticked up/down
+            const prevData = previousGoldPricesMap[code];
+
+            // Determine if price ticked up/down for the sidebar list
             let tickClass = '';
-            if (oldData) {
-                if (data.price_buy > oldData.price_buy) {
+            if (prevData && isNewUpdate) {
+                if (data.price_buy > prevData.price_buy) {
                     tickClass = 'tick-up';
-                } else if (data.price_buy < oldData.price_buy) {
+                } else if (data.price_buy < prevData.price_buy) {
                     tickClass = 'tick-down';
                 }
             }
@@ -89,6 +100,19 @@ function listenToLatestPrices() {
                 ...data,
                 tickClass: tickClass
             };
+            
+            // Sayfa ilk yüklendiğinde "önceki" veriyi bulup renkleri anında göstermek için Firestore history altından çekiyoruz
+            if (!prevData && !isNewUpdate) {
+                db.collection('gold_prices').doc(code).collection('history')
+                    .orderBy('source_updated_at', 'desc').limit(2).get()
+                    .then(histSnap => {
+                        if (histSnap.docs.length === 2) {
+                            // En son 2. kayıt aslında bir önceki fiyattır
+                            previousGoldPricesMap[code] = histSnap.docs[1].data();
+                            renderLiveTicker(); // Veri geldiğinde ticker'ı tekrar renklendir
+                        }
+                    }).catch(e => console.error(e));
+            }
             
             listItems.push(goldPricesMap[code]);
             updatedCount++;
@@ -261,6 +285,37 @@ function fetchHistoryData() {
 
         // Update Change percentage indicator in hero
         updateChangePercent(buyPrices);
+
+        // Eğer seçilen zaman diliminde hiç veri yoksa (grafik çizilemiyorsa), 
+        // fallback olarak limitli en son verileri (geçmiş dataları) çekmek için sorguyu değiştir.
+        if (labels.length === 0 && currentRange !== "all") {
+            console.log("Seçilen zaman diliminde veri yok, son 50 kayıt çekiliyor (Fallback)...");
+            latestRef.collection("history").orderBy("source_updated_at", "desc").limit(50).get().then(fallbackSnap => {
+                const fbLabels = [];
+                const fbBuy = [];
+                const fbSell = [];
+                
+                // Firestore desc döndürdüğü için grafiğe basmadan önce ters çevirmemiz (eskiden yeniye) gerekir.
+                const reversedDocs = [...fallbackSnap.docs].reverse();
+                
+                reversedDocs.forEach(d => {
+                    const fd = d.data();
+                    let ts = fd.source_updated_at ? (fd.source_updated_at.toDate ? fd.source_updated_at.toDate() : new Date(fd.source_updated_at)) : new Date();
+                    fbLabels.push(ts.toLocaleString([], { month: short, day: numeric, hour: 2-digit, minute: 2-digit }));
+                    fbBuy.push(fd.price_buy);
+                    fbSell.push(fd.price_sell);
+                });
+                
+                updateStats(fbBuy, fbSell);
+                updateChangePercent(fbBuy);
+                renderChart(fbLabels, fbBuy, fbSell);
+                showChartLoader(false);
+            }).catch(e => {
+                console.error("Fallback hatası:", e);
+                showChartLoader(false);
+            });
+            return; // Normal akışı durdur
+        }
 
         // Render standard or updated Chart
         renderChart(labels, buyPrices, sellPrices);
@@ -476,16 +531,25 @@ function renderLiveTicker() {
     renderItems.forEach(item => {
         const prevItem = previousGoldPricesMap[item.code];
         
-        let colorClass = "text-slate-300"; // nötr
+        let buyColor = "text-slate-300"; // nötr
+        let sellColor = "text-slate-300"; // nötr
         let iconHtml = "";
 
         if (prevItem) {
+            // Alış Fiyatı Karşılaştırması
             if (item.price_buy > prevItem.price_buy) {
-                colorClass = "text-emerald-400 font-bold";
+                buyColor = "text-emerald-400 font-bold";
                 iconHtml = `<i class="fa-solid fa-caret-up mr-1 text-emerald-400"></i>`;
             } else if (item.price_buy < prevItem.price_buy) {
-                colorClass = "text-red-400 font-bold";
+                buyColor = "text-red-400 font-bold";
                 iconHtml = `<i class="fa-solid fa-caret-down mr-1 text-red-400"></i>`;
+            }
+            
+            // Satış Fiyatı Karşılaştırması
+            if (item.price_sell > prevItem.price_sell) {
+                sellColor = "text-emerald-400 font-bold";
+            } else if (item.price_sell < prevItem.price_sell) {
+                sellColor = "text-red-400 font-bold";
             }
         }
 
@@ -493,9 +557,10 @@ function renderLiveTicker() {
             <div class="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-900/60 border border-white/5">
                 <span class="font-display font-black text-xs text-white tracking-wide">${item.code}</span>
                 <span class="text-[10px] text-slate-500 font-semibold uppercase">${item.description || ""}</span>
-                <div class="flex items-center text-xs ${colorClass}">
+                <div class="flex items-center text-xs">
                     ${iconHtml}
-                    <span>A: ${item.price_buy ? item.price_buy.toFixed(2) : "--"} / S: ${item.price_sell ? item.price_sell.toFixed(2) : "--"}</span>
+                    <span class="mr-1">A: <span class="${buyColor}">${item.price_buy ? item.price_buy.toFixed(2) : "--"}</span></span>
+                    <span>S: <span class="${sellColor}">${item.price_sell ? item.price_sell.toFixed(2) : "--"}</span></span>
                 </div>
             </div>
         `;
