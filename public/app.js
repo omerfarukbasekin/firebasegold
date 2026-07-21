@@ -104,7 +104,7 @@ function listenToLatestPrices() {
             // Sayfa ilk yüklendiğinde "önceki" veriyi bulup renkleri anında göstermek için Firestore history altından çekiyoruz
             if (!prevData && !isNewUpdate) {
                 db.collection('gold_prices').doc(code).collection('history')
-                    .orderBy('source_updated_at', 'desc').limit(2).get()
+                    .orderBy('created_at', 'desc').limit(2).get()
                     .then(histSnap => {
                         if (histSnap.docs.length === 2) {
                             // En son 2. kayıt aslında bir önceki fiyattır
@@ -247,18 +247,6 @@ function fetchHistoryData() {
     let query = latestRef.collection('history').orderBy('source_updated_at', 'asc');
 
     // Filter by timestamp range
-    const now = new Date();
-    if (currentRange === '24h') {
-        const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        query = query.where('source_updated_at', '>=', oneDayAgo);
-    } else if (currentRange === '1w') {
-        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        query = query.where('source_updated_at', '>=', oneWeekAgo);
-    } else if (currentRange === '1m') {
-        const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        query = query.where('source_updated_at', '>=', oneMonthAgo);
-    }
-
     unsubscribeHistory = query.onSnapshot((snapshot) => {
         const labels = [];
         const buyPrices = [];
@@ -280,51 +268,50 @@ function fetchHistoryData() {
             sellPrices.push(hData.price_sell);
         });
 
-        // Update statistics cards based on selected historical subset
-        updateStats(buyPrices, sellPrices);
-
-        // Update Change percentage indicator in hero
-        updateChangePercent(buyPrices);
-
-        // Eğer seçilen zaman diliminde hiç veri yoksa (grafik çizilemiyorsa), 
-        // fallback olarak limitli en son verileri (geçmiş dataları) çekmek için sorguyu değiştir.
-        if (labels.length === 0 && currentRange !== "all") {
-            console.log("Seçilen zaman diliminde veri yok, son 50 kayıt çekiliyor (Fallback)...");
-            latestRef.collection("history").orderBy("source_updated_at", "desc").limit(50).get().then(fallbackSnap => {
-                const fbLabels = [];
-                const fbBuy = [];
-                const fbSell = [];
-                
-                // Firestore desc döndürdüğü için grafiğe basmadan önce ters çevirmemiz (eskiden yeniye) gerekir.
-                const reversedDocs = [...fallbackSnap.docs].reverse();
-                
-                reversedDocs.forEach(d => {
-                    const fd = d.data();
-                    let ts = fd.source_updated_at ? (fd.source_updated_at.toDate ? fd.source_updated_at.toDate() : new Date(fd.source_updated_at)) : new Date();
-                    fbLabels.push(ts.toLocaleString([], { month: short, day: numeric, hour: 2-digit, minute: 2-digit }));
-                    fbBuy.push(fd.price_buy);
-                    fbSell.push(fd.price_sell);
+        // Eğer grafikte çizilecek hiç veri yoksa FALLBACK devreye girer:
+        if (labels.length === 0 && currentRange !== 'all') {
+            console.log("Grafik verisi boş geldi, Fallback (son 50 veri) çekiliyor...");
+            latestRef.collection('history')
+                .orderBy('source_updated_at', 'desc')
+                .limit(50)
+                .get()
+                .then(fallbackSnap => {
+                    const fbLabels = [];
+                    const fbBuy = [];
+                    const fbSell = [];
+                    
+                    const reversedDocs = [...fallbackSnap.docs].reverse();
+                    reversedDocs.forEach(d => {
+                        const fd = d.data();
+                        let ts = fd.source_updated_at ? (fd.source_updated_at.toDate ? fd.source_updated_at.toDate() : new Date(fd.source_updated_at)) : new Date();
+                        fbLabels.push(ts.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }));
+                        fbBuy.push(fd.price_buy);
+                        fbSell.push(fd.price_sell);
+                    });
+                    
+                    updateStats(fbBuy, fbSell);
+                    updateChangePercent(fbBuy);
+                    renderChart(fbLabels, fbBuy, fbSell);
+                    showChartLoader(false);
+                }).catch(e => {
+                    console.error("Fallback hatası:", e);
+                    showChartLoader(false);
                 });
-                
-                updateStats(fbBuy, fbSell);
-                updateChangePercent(fbBuy);
-                renderChart(fbLabels, fbBuy, fbSell);
-                showChartLoader(false);
-            }).catch(e => {
-                console.error("Fallback hatası:", e);
-                showChartLoader(false);
-            });
-            return; // Normal akışı durdur
+            return;
         }
 
-        // Render standard or updated Chart
+        // Normal grafiği çiz
+        updateStats(buyPrices, sellPrices);
+        updateChangePercent(buyPrices);
         renderChart(labels, buyPrices, sellPrices);
         showChartLoader(false);
+
     }, (error) => {
         console.error("Historical fetch error:", error);
         showChartLoader(false);
     });
 }
+
 
 function updateChangePercent(buyPrices) {
     if (buyPrices.length < 2) {
